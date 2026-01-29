@@ -1,18 +1,14 @@
-from flask import Blueprint, json, request
-from flask import request, jsonify
-from datetime import datetime
+from flask import Blueprint, request, jsonify
+from datetime import datetime, timedelta, timezone
 from app.extensions import mongo
-from datetime import timedelta
+
+webhook = Blueprint("webhook", __name__, url_prefix="/webhook")
 
 
-
-webhook = Blueprint('Webhook', __name__, url_prefix='/webhook')
-
-@webhook.route('/receiver', methods=["POST"])
+@webhook.route("/receiver", methods=["POST"])
 def receiver():
     event_type = request.headers.get("X-GitHub-Event")
     payload = request.json
-
     event_data = None
 
     # PUSH EVENT
@@ -27,10 +23,10 @@ def receiver():
             )
         }
 
-    # PULL REQUEST & MERGE EVENT
+    # PULL REQUEST / MERGE EVENT (bonus)
     elif event_type == "pull_request":
         pr = payload["pull_request"]
-        event_name = "merge" if pr["merged"] else "pull_request"
+        event_name = "merge" if pr.get("merged") else "pull_request"
 
         event_data = {
             "author": pr["user"]["login"],
@@ -42,16 +38,21 @@ def receiver():
             )
         }
 
-    # STORE IN DB
+    # STORE EVENT
     if event_data:
         mongo.db.events.insert_one(event_data)
 
     return jsonify({"status": "ok"}), 200
 
 
-@webhook.route('/events', methods=["GET"])
+@webhook.route("/events", methods=["GET"])
 def get_events():
-    time_limit = datetime.utcnow() - timedelta(seconds=15)
+    """
+    Return recent GitHub events from the last 15 minutes.
+    Sorted newest to oldest.
+    """
+
+    time_limit = datetime.now(timezone.utc) - timedelta(minutes=15)
 
     events = list(
         mongo.db.events.find(
@@ -61,5 +62,3 @@ def get_events():
     )
 
     return jsonify(events), 200
-
-
