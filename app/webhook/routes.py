@@ -2,6 +2,8 @@ from flask import Blueprint, json, request
 from flask import request, jsonify
 from datetime import datetime
 from app.extensions import mongo
+from datetime import timedelta
+
 
 
 webhook = Blueprint('Webhook', __name__, url_prefix='/webhook')
@@ -45,4 +47,19 @@ def receiver():
         mongo.db.events.insert_one(event_data)
 
     return jsonify({"status": "ok"}), 200
+
+
+@webhook.route('/events', methods=["GET"])
+def get_events():
+    time_limit = datetime.utcnow() - timedelta(seconds=15)
+
+    events = list(
+        mongo.db.events.find(
+            {"timestamp": {"$gte": time_limit}},
+            {"_id": 0}
+        ).sort("timestamp", -1)
+    )
+
+    return jsonify(events), 200
+
 
